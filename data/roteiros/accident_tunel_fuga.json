@@ -1,0 +1,8 @@
+{
+ "video": "data/videos/accident_tunel_fuga.mp4",
+ "descricao": "ACCIDENT (preview publico, sideswipe): caminhao raspa num carro no tunel, o carro capota e o caminhao segue sem parar. Batida e fuga marcadas a mao porque o carro capotado some da deteccao e o caminhao foge em profundidade.",
+ "seta": [],
+ "batida": [
+  {"t": 3.65, "x": 594, "y": 160, "x2": 673, "y2": 205, "fugiu": 2}
+ ]
+}

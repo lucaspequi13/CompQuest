@@ -42,6 +42,22 @@ class Overlay:
     def add_fuga(self, ev):
         self.items.append((ev["frame"] + self.hold * 2, "fuga", ev))
 
+    def add_alert(self, frame_idx, track, text):
+        """Infração das regras (sinal vermelho, contramão, linha contínua...): rastro vermelho + etiqueta."""
+        ev = {"frame": frame_idx, "track_id": track.id, "trilha": list(track.trail), "texto": text}
+        self.items.append((frame_idx + self.hold, "alerta", ev))
+
+    @staticmethod
+    def draw_light(img, roi, state):
+        """Contorna o semáforo na cor lida e escreve o estado (o que o sistema 'viu')."""
+        if not roi:
+            return
+        x1, y1, x2, y2 = map(int, roi)
+        cor = {"red": BGR["vermelho"], "yellow": BGR["amarelo"], "green": BGR["verde"]}.get(state, BGR["cinza"])
+        nome = {"red": "VERMELHO", "yellow": "AMARELO", "green": "VERDE"}.get(state, "?")
+        cv2.rectangle(img, (x1, y1), (x2, y2), cor, 2)
+        put_text(img, f"SINAL: {nome}", (x1, y2 + 22), cor, 0.65, 2)
+
     def draw(self, img, frame_idx, tracks):
         # rastro fino de todos os veículos (contexto)
         for t in tracks:
@@ -67,12 +83,19 @@ class Overlay:
                 cv2.circle(img, (x, y), r, BGR["vermelho"], 3, cv2.LINE_AA)
                 put_text(img, "BATIDA" + (" (roteiro)" if ev.get("roteiro") else ""), (x - 30, y - r - 8),
                          BGR["vermelho"], 0.7, 2)
+            elif kind == "alerta":
+                t = live.get(ev["track_id"])
+                pts = list(ev["trilha"]) + (list(t.trail)[-30:] if t is not None else [])
+                draw_path(img, pts, BGR["vermelho"], 4)
+                end = pts[-1]
+                put_text(img, ev["texto"], (end[0] + 10, end[1] + 6), BGR["vermelho"], 0.8, 2)
             elif kind == "fuga":
                 t = live.get(ev["track_id"])
                 pts = list(ev["trilha"]) + (list(t.trail)[-30:] if t is not None else [])
                 draw_path(img, pts, BGR["vermelho"], 4)
                 end = pts[-1]
-                put_text(img, f"FUGA #{ev['track_id']}", (end[0] + 8, end[1] + 18), BGR["vermelho"], 0.7, 2)
+                txt = f"FUGA #{ev['track_id']}" + (" (roteiro)" if ev.get("fuga_do_roteiro") else "")
+                put_text(img, txt, (end[0] + 8, end[1] + 18), BGR["vermelho"], 0.7, 2)
         self._legend(img)
         if self.roteiro:
             h = img.shape[0]

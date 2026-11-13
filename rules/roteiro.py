@@ -16,8 +16,10 @@ Formato (tempos em segundos desde o início do vídeo; x, y em pixels do vídeo 
   ],
   "batida": [
     {"t": 15.2, "x": 420, "y": 380},                                  # os 2 veículos mais perto do ponto
-    {"t": 20.0, "x": 300, "y": 200, "x2": 340, "y2": 210}             # ou um ponto em cada veículo
+    {"t": 20.0, "x": 300, "y": 200, "x2": 340, "y2": 210},            # ou um ponto em cada veículo
+    {"t": 3.7, "x": 595, "y": 160, "x2": 675, "y2": 200, "fugiu": 2}  # fuga marcada à mão (2º veículo)
   ]
+Sem "fugiu", quem decide a fuga é o sistema (um se afasta, o outro fica).
 }
 O veículo é achado pela posição no instante t0/t: a caixa que contém (x, y), ou a mais perto (até max_dist px).
 Só veículos citados no roteiro têm a seta "confiável"; os demais continuam amarelos (revisão).
@@ -87,8 +89,11 @@ class Roteiro:
                     pair = nearest_tracks(tracks, b["x"], b["y"], 2, self.max_dist * 2)
                 if len(pair) == 2:
                     b["done"] = True
-                    forced.append((pair[0].id, pair[1].id, (b["x"], b["y"])))
-                    self.log.append({"frame": frame_idx, "batida": [pair[0].id, pair[1].id]})
+                    # "fugiu": 1 ou 2 = qual dos pontos é quem foi embora (quando o sistema não consegue ver,
+                    # ex.: vítima capotada some da detecção, fuga em profundidade no túnel). Fica marcado como roteiro.
+                    leaver = pair[b["fugiu"] - 1].id if b.get("fugiu") in (1, 2) and "x2" in b else None
+                    forced.append((pair[0].id, pair[1].id, (b["x"], b["y"]), leaver))
+                    self.log.append({"frame": frame_idx, "batida": [pair[0].id, pair[1].id], "fugiu": leaver})
                 elif frame_idx > b["f"] + self.fps:  # 1 s sem achar 2 veículos: desiste e avisa
                     b["done"] = True
                     self.log.append({"frame": frame_idx, "batida_nao_achada": [b["x"], b["y"]]})

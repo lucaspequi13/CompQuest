@@ -33,6 +33,12 @@ from rules.roteiro import Roteiro  # noqa: E402
 from rules.types import Violation  # noqa: E402
 
 MANOBRA_INFRACAO = {"troca_faixa": "troca_faixa_sem_seta", "conversao": "conversao_sem_seta"}
+# texto curto no vídeo para as infrações das regras (rules/violations/checks.py)
+ROTULO = {"avanco_sinal_vermelho": "AVANCOU O VERMELHO", "contramao": "CONTRAMAO",
+          "transpor_linha_continua": "CRUZOU LINHA CONTINUA", "conversao_proibida": "CONVERSAO PROIBIDA",
+          "parada_sobre_faixa_pedestre": "PAROU NA FAIXA", "faixa_exclusiva_onibus": "FAIXA DE ONIBUS",
+          "gato_canteiro": "GATO: PASSOU NO CANTEIRO", "gato_marcha_re": "GATO: MARCHA A RE",
+          "troca_faixa_sem_seta": "TROCOU DE FAIXA SEM SETA"}
 
 
 def draw_scene(frame, scene):
@@ -67,6 +73,7 @@ def main():
     ap.add_argument("--blinker-model", default="models/blinker_rf.joblib",
                     help="RandomForest de scripts/train_blinker.py (sem arquivo = baseline heurístico)")
     ap.add_argument("--roteiro", help="JSON com seta/batida anotadas à mão (modo roteiro, ver rules/roteiro.py)")
+    ap.add_argument("--conf", type=float, default=0.35, help="confiança mínima do YOLO (baixar mantém veículo capotado/borrado)")
     ap.add_argument("--min-box", type=float, default=0.06,
                     help="altura mínima da caixa (fração da imagem) p/ manobra e batida. Vista de cima/drone: 0.02")
     ap.add_argument("--dump-tracks", action="store_true", help="grava tracks.csv (frame, id, classe, caixa)")
@@ -80,7 +87,7 @@ def main():
     w, h = int(cap.get(3)), int(cap.get(4))
     writer = cv2.VideoWriter(os.path.join(args.out, "video_anotado.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
 
-    det = Detector(args.weights, keep=None if args.all_classes else VEHICLES)
+    det = Detector(args.weights, conf=args.conf, keep=None if args.all_classes else VEHICLES)
     trk, eng = Tracker(), RuleEngine(args.scene)
     blink = BlinkerClassifier(fps, args.blinker_model)
     print("Seta:", "RandomForest" if blink.model else "baseline heurístico (sem modelo treinado)",
@@ -130,6 +137,10 @@ def main():
             for t in tracks:
                 f_trk.write(f"{idx},{idx / fps:.2f},{t.id},{t.cls}," + ",".join(f"{v:.0f}" for v in t.box) + "\n")
         violations = eng.evaluate(tracks, idx, ts, light)
+        by_id = {t.id: t for t in tracks}
+        for v in violations:
+            if v.track_id in by_id:
+                ov.add_alert(idx, by_id[v.track_id], ROTULO.get(v.type, v.type.upper()))
 
         # manobras pela trajetória: verde / vermelho (infração) / amarelo (revisão)
         roi = eng.scene.get("maneuver_roi")  # onde a regra de manobra vale (fora: curva, borda, estacionamento)
@@ -145,7 +156,7 @@ def main():
             elif ev["cor"] != VERMELHO:
                 review(ev)
         # batida e batida com fuga (a batida pode vir do roteiro; a fuga é sempre decidida pelo sistema)
-        col_events = [cw.force(a, b, p, idx) for a, b, p in forced]
+        col_events = [cw.force(a, b, p, idx, leaver) for a, b, p, leaver in forced]
         col_events += cw.update(tracks, {t.id for t in trk.tracks}, idx)
         for ev in col_events:
             if ev["tipo"] == "colisao":
@@ -155,7 +166,8 @@ def main():
                 ov.add_fuga(ev)
                 violations.append(make("evasao_apos_colisao", "gravissima", "Art. 176, I (conferir)",
                                        ev["track_id"], ev["ponto"], idx, ts,
-                                       {"ficou": ev["ficou"], "batida_do_roteiro": ev.get("roteiro", False)}))
+                                       {"ficou": ev["ficou"], "batida_do_roteiro": ev.get("roteiro", False),
+                                        "fuga_do_roteiro": ev.get("fuga_do_roteiro", False)}))
             else:
                 review(ev)
 
@@ -168,6 +180,7 @@ def main():
             cv2.rectangle(vis, (x1, y1), (x2, y2), color, 1)
             cv2.putText(vis, f"{t.cls} #{t.id}", (x1, y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
         ov.draw(vis, idx, tracks)
+        ov.draw_light(vis, eng.scene.get("traffic_light_roi"), light)
         cv2.putText(vis, f"t={idx / fps:5.1f}s  frame {idx}  semaforo: {light}", (10, 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         buf.push(frame)

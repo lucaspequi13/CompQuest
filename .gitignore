@@ -14,3 +14,6 @@ data/videos/uadetrac/
 data/videos/demo_*.mp4
 # pesos intermediários (o final, models/detector_final.pt, vai no git)
 models/*_parcial.pt
+# vídeos de datasets de terceiros (TU-DAT, ACCIDENT: uso só para pesquisa)
+data/videos/tudat_*.mp4
+data/videos/accident_*.mp4

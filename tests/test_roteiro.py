@@ -49,10 +49,27 @@ def test_roteiro_batida_then_system_decides_fuga():
     for i, pa in enumerate(a):
         dets = [Detection((300, 160, 360, 200), "car", 0.9), Detection((pa[0] - 20, pa[1] - 40, pa[0] + 20, pa[1]), "car", 0.9)]
         tracks = tr.update(dets)
-        for ida, idb, p in rot.apply(tracks, i):
-            evs.append(cw.force(ida, idb, p, i))
+        for ida, idb, p, lv in rot.apply(tracks, i):
+            evs.append(cw.force(ida, idb, p, i, lv))
         evs += cw.update(tracks, {t.id for t in tr.tracks}, i)
     fugas = [e for e in evs if e["tipo"] == "fuga"]
     assert any(e.get("roteiro") for e in evs if e["tipo"] == "colisao")
     assert len(fugas) == 1 and fugas[0]["track_id"] == 2 and fugas[0]["ficou"] == [1]
-    assert fugas[0]["roteiro"] is True
+    assert fugas[0]["roteiro"] is True and not fugas[0].get("fuga_do_roteiro")  # fuga decidida pelo sistema
+
+
+def test_roteiro_fuga_marcada_quando_sistema_nao_ve():
+    """Vítima some da detecção (capotou) e o outro vai embora devagar em profundidade: o roteiro diz quem fugiu."""
+    rot = Roteiro({"batida": [{"t": 0.2, "x": 330, "y": 190, "x2": 270, "y2": 195, "fugiu": 2}]}, FPS)
+    tr, cw, evs = Tracker(min_hits=1), CollisionWatcher(FPS, (640, 480)), []
+    for i in range(80):
+        dets = [Detection((250, 160, 290, 200), "car", 0.9)]               # quem foge (anda pouco na tela)
+        if i < 12:
+            dets.append(Detection((300, 160, 360, 200), "car", 0.9))       # vítima some depois
+        tracks = tr.update(dets)
+        for ida, idb, p, lv in rot.apply(tracks, i):
+            evs.append(cw.force(ida, idb, p, i, lv))
+        evs += cw.update(tracks, {t.id for t in tr.tracks}, i)
+    fugas = [e for e in evs if e["tipo"] == "fuga"]
+    assert len(fugas) == 1 and fugas[0]["fuga_do_roteiro"] is True
+    assert fugas[0]["track_id"] == rot.log[0]["fugiu"]
