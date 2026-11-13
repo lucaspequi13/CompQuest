@@ -1,19 +1,22 @@
 .venv/
 __pycache__/
 *.pyc
+# datasets brutos e convertidos (16 GB): baixar/converter de novo com os scripts (ver CLAUDE.md)
 data/raw/
 data/processed/
+data/gravacao/
 models/pretrained/*.pt
-runs/
+models/*_parcial.pt
 evidence/out/
 .DS_Store
-# vídeos baixados / gerados (pesados, licença de terceiros) — ver CLAUDE.md para refazer
-data/videos/mixkit/
-data/videos/pexels/
-data/videos/uadetrac/
-data/videos/demo_*.mp4
-# pesos intermediários (o final, models/detector_final.pt, vai no git)
-models/*_parcial.pt
-# vídeos de datasets de terceiros (TU-DAT, ACCIDENT: uso só para pesquisa)
-data/videos/tudat_*.mp4
-data/videos/accident_*.mp4
+# vídeos de entrada (baixados / de terceiros): não vão para o git
+data/videos/*/
+data/videos/*.mp4
+!data/videos/car-detection.mp4
+!data/videos/person-bicycle-car-detection.mp4
+# resultados: só as imagens que usamos e os vídeos finais delas (runs/VIDEOS_DEMO)
+runs/*
+!runs/VIDEOS_DEMO/
+runs/VIDEOS_DEMO/2_versoes_antigas/
+runs/VIDEOS_DEMO/fotos/cruzamento_roteiro_modelo_visdrone/
+runs/VIDEOS_DEMO/fotos/avenida_roteiro_modelo_parcial/

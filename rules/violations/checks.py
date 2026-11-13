@@ -172,7 +172,10 @@ def gato_re(track, ctx, min_px: float = 25.0):
     fwd = (b[0] - a[0], b[1] - a[1])
     back = (c[0] - b[0], c[1] - b[1])
     n1, n2 = (fwd[0] ** 2 + fwd[1] ** 2) ** 0.5, (back[0] ** 2 + back[1] ** 2) ** 0.5
-    if n1 < min_px or n2 < min_px:
+    # mínimo proporcional ao carro: carro parado "treme" quando outro passa na frente (oclusão),
+    # e em vídeo ampliado 25 px fixos viram nada
+    min_move = max(min_px, 0.5 * (track.box[3] - track.box[1]))
+    if n1 < min_move or n2 < min_move:
         return None
     if cos_angle(fwd, back) < -0.85 and _once(track, "gato_re"):
         v = ctx.make("gato_marcha_re", "grave", "Art. 194", track)

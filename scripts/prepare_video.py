@@ -22,6 +22,9 @@ def main():
     ap.add_argument("--start", type=float, default=0.0)
     ap.add_argument("--end", type=float, default=0.0)
     ap.add_argument("--rotate", type=int, default=0, choices=[0, 90, 180, 270])
+    ap.add_argument("--crop", type=int, nargs=4, metavar=("X1", "Y1", "X2", "Y2"),
+                    help="recorta só a imagem da câmera (tira logo, legenda e player de vídeo de reportagem)")
+    ap.add_argument("--scale", type=float, default=1.0, help="amplia o vídeo (ex.: 2 para vídeo pequeno de rede social)")
     a = ap.parse_args()
 
     cap = cv2.VideoCapture(a.src)
@@ -40,6 +43,11 @@ def main():
         if (idx - f0) % step == 0:
             if a.rotate:
                 im = cv2.rotate(im, ROT[a.rotate])
+            if a.crop:
+                x1, y1, x2, y2 = a.crop
+                im = im[y1:y2, x1:x2]
+            if a.scale != 1.0:
+                im = cv2.resize(im, None, fx=a.scale, fy=a.scale, interpolation=cv2.INTER_CUBIC)
             h, w = im.shape[:2]
             s = min(1.0, a.max_side / max(h, w))
             if s < 1.0:

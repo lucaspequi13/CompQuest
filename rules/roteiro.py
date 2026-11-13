@@ -17,10 +17,18 @@ Formato (tempos em segundos desde o início do vídeo; x, y em pixels do vídeo 
   "batida": [
     {"t": 15.2, "x": 420, "y": 380},                                  # os 2 veículos mais perto do ponto
     {"t": 20.0, "x": 300, "y": 200, "x2": 340, "y2": 210},            # ou um ponto em cada veículo
-    {"t": 3.7, "x": 595, "y": 160, "x2": 675, "y2": 200, "fugiu": 2}  # fuga marcada à mão (2º veículo)
+    {"t": 3.7, "x": 595, "y": 160, "x2": 675, "y2": 200, "fugiu": 2}, # fuga marcada à mão (2º veículo)
+    {"t": 2.2, "x": 560, "y": 330, "vitima": [340, 300]}              # veículo x vítima não rastreada
   ]
-Sem "fugiu", quem decide a fuga é o sistema (um se afasta, o outro fica).
+  "manobra": [
+    {"t0": 0.4, "t1": 2.0, "x": 406, "y": 290, "tipo": "troca_faixa"} # quando a geometria não confirma sozinha
+  ]
 }
+"vitima" = onde a moto/pedestre caiu (o YOLO não pega moto pequena/caída). A vítima fica no local por definição;
+se o veículo for embora, o sistema acusa a fuga sozinho.
+Sem "fugiu", quem decide a fuga é o sistema (um se afasta, o outro fica).
+"manobra" = o roteiro diz QUANDO houve a manobra (ex.: troca de faixa que acontece "em profundidade" na
+perspectiva da câmera); a rota desenhada é a trajetória real, o LADO vem da geometria e a cor vem da seta.
 O veículo é achado pela posição no instante t0/t: a caixa que contém (x, y), ou a mais perto (até max_dist px).
 Só veículos citados no roteiro têm a seta "confiável"; os demais continuam amarelos (revisão).
 
@@ -53,6 +61,10 @@ class Roteiro:
                 raise ValueError(f"lado inválido no roteiro: {s['lado']} (use {SIDES})")
             self.seta.append({**s, "f0": round(s["t0"] * fps), "f1": round(s["t1"] * fps), "track": None})
         self.batida = [{**b, "f": round(b["t"] * fps), "done": False} for b in data.get("batida", [])]
+        # manobra que a geometria não confirma sozinha (troca de faixa "em profundidade"): o roteiro diz QUANDO;
+        # a rota desenhada é a trajetória real do track e o LADO é calculado pela geometria.
+        self.manobra = [{**m, "f0": round(m["t0"] * fps), "f1": round(m["t1"] * fps), "done": False}
+                        for m in data.get("manobra", [])]
         self.log = []  # o que foi aplicado, para conferir
 
     @classmethod
@@ -80,6 +92,16 @@ class Roteiro:
         forced = []
         for b in self.batida:
             if not b["done"] and frame_idx >= b["f"]:
+                if "vitima" in b:  # vítima não rastreada (moto/pedestre caído): ponto fixo; o sistema decide a fuga
+                    hit = nearest_tracks(tracks, b["x"], b["y"], 1, self.max_dist)
+                    if hit:
+                        b["done"] = True
+                        forced.append((hit[0].id, None, tuple(b["vitima"]), None))
+                        self.log.append({"frame": frame_idx, "batida": [hit[0].id, "vitima"]})
+                    elif frame_idx > b["f"] + self.fps:
+                        b["done"] = True
+                        self.log.append({"frame": frame_idx, "batida_nao_achada": [b["x"], b["y"]]})
+                    continue
                 if "x2" in b:  # um ponto em cada veículo: sem ambiguidade em trânsito cheio
                     first = nearest_tracks(tracks, b["x"], b["y"], 1, self.max_dist)
                     second = nearest_tracks(tracks, b["x2"], b["y2"], 1, self.max_dist,
@@ -98,3 +120,19 @@ class Roteiro:
                     b["done"] = True
                     self.log.append({"frame": frame_idx, "batida_nao_achada": [b["x"], b["y"]]})
         return forced
+
+    def maneuvers(self, tracks, frame_idx: int):
+        """Manobras do roteiro que terminam neste frame: [(track, frames_desde_o_inicio, tipo)]."""
+        out = []
+        for m in self.manobra:
+            if not m["done"] and frame_idx >= m["f1"]:
+                hit = nearest_tracks(tracks, m["x"], m["y"], 1, self.max_dist)
+                if hit:
+                    m["done"] = True
+                    out.append((hit[0], frame_idx - m["f0"], m.get("tipo", "troca_faixa")))
+                    self.log.append({"frame": frame_idx, "manobra": m.get("tipo", "troca_faixa"),
+                                     "track_id": hit[0].id})
+                elif frame_idx > m["f1"] + self.fps:
+                    m["done"] = True
+                    self.log.append({"frame": frame_idx, "manobra_nao_achada": [m["x"], m["y"]]})
+        return out

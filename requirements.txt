@@ -11,5 +11,8 @@ streamlit
 pytest
 scikit-learn
 joblib
-# opcional, para OCR de placa quando tiver o detector de placas:
-# easyocr
+# placa: detector pronto + OCR (puxam opencv-python-headless; se o cv2 perder a GUI,
+# desinstale o headless e reinstale opencv-python com --force-reinstall --no-deps)
+fast-plate-ocr
+open-image-models
+onnxruntime

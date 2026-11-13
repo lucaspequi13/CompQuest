@@ -1,0 +1,7 @@
+{
+ "video": "data/videos/eptv_saudade.mp4",
+ "descricao": "Jornal da EPTV, Av. da Saudade: carro troca de pista sem dar seta (dito na reportagem), derruba a motociclista e vai embora. Roteiro: seta (nenhuma, da reportagem), quando foi a troca de pista, momento da batida e ponto onde a moto caiu. Rota, lado, placa e FUGA sao do sistema.",
+ "seta": [{"t0": 0.4, "t1": 3.0, "x": 253, "y": 200, "lado": "nenhuma"}],
+ "manobra": [{"t0": 0.4, "t1": 2.0, "x": 406, "y": 290, "tipo": "troca_faixa"}],
+ "batida": [{"t": 2.2, "x": 420, "y": 290, "vitima": [315, 292]}]
+}

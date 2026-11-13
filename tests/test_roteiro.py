@@ -27,6 +27,7 @@ def _run(roteiro_data):
             ev = mw.update(t, i, t.state["blinker_reliable"])
             if ev:
                 evs.append(ev)
+    evs += mw.flush(set(), len(_path()), lambda t: t.state["blinker_reliable"])
     return evs, rot
 
 
@@ -56,6 +57,20 @@ def test_roteiro_batida_then_system_decides_fuga():
     assert any(e.get("roteiro") for e in evs if e["tipo"] == "colisao")
     assert len(fugas) == 1 and fugas[0]["track_id"] == 2 and fugas[0]["ficou"] == [1]
     assert fugas[0]["roteiro"] is True and not fugas[0].get("fuga_do_roteiro")  # fuga decidida pelo sistema
+
+
+def test_batida_com_vitima_nao_rastreada_e_carro_que_vai_embora():
+    """Moto caída não é detectada: o roteiro marca o ponto da vítima; o carro segue -> fuga decidida pelo sistema."""
+    rot = Roteiro({"batida": [{"t": 0.5, "x": 260, "y": 200, "vitima": [250, 210]}]}, FPS)
+    tr, cw, evs = Tracker(min_hits=1), CollisionWatcher(FPS, (640, 480)), []
+    for i in range(60):
+        x = 100 + 10 * i                                                   # carro passa e segue
+        tracks = tr.update([Detection((x - 20, 160, x + 20, 200), "car", 0.9)] if x < 620 else [])
+        for a, b, p, lv in rot.apply(tracks, i):
+            evs.append(cw.force(a, b, p, i, lv))
+        evs += cw.update(tracks, {t.id for t in tr.tracks}, i)
+    fugas = [e for e in evs if e["tipo"] == "fuga"]
+    assert len(fugas) == 1 and fugas[0]["ficou"] == ["vitima"] and not fugas[0].get("fuga_do_roteiro")
 
 
 def test_roteiro_fuga_marcada_quando_sistema_nao_ve():

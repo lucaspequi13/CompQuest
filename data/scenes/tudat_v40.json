@@ -1,1 +1,1 @@
-{"camera_id": "tudat_v40", "traffic_light_roi": [900, 25, 960, 80], "stop_line": [[0, 462], [1280, 545]]}
+{"camera_id": "tudat_v40", "traffic_light_roi": [900, 25, 960, 80], "stop_line": [[0, 462], [1280, 545]], "plate_ignore": [[190, 25, 640, 60], [1080, 540, 1280, 665]]}
