@@ -18,7 +18,7 @@ def absolutize(yaml_path: str) -> str:
     """O Ultralytics resolve 'path' relativo a partir da pasta de datasets dele,
     não do YAML. Reescreve com caminho absoluto em runs/_data/."""
     import yaml
-    with open(yaml_path) as f:
+    with open(yaml_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     p = cfg.get("path", ".")
     if not os.path.isabs(p):
@@ -26,7 +26,7 @@ def absolutize(yaml_path: str) -> str:
     out_dir = os.path.join(ROOT, "runs", "_data")
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, os.path.basename(yaml_path))
-    with open(out, "w") as f:
+    with open(out, "w", encoding="utf-8") as f:
         yaml.safe_dump(cfg, f, allow_unicode=True)
     return out
 
@@ -49,6 +49,8 @@ def main():
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--name", default="visdrone_vehicles")
     ap.add_argument("--device", default=None)
+    ap.add_argument("--workers", type=int, default=4, help="processos de CPU carregando imagens")
+    ap.add_argument("--patience", type=int, default=15)
     ap.add_argument("--quick", action="store_true", help="1 época em 10%% dos dados, só para validar o setup")
     ap.add_argument("--resume", help="continuar um treino interrompido: caminho do last.pt")
     args = ap.parse_args()
@@ -73,8 +75,8 @@ def main():
         project=os.path.join(ROOT, "runs", "train"),
         name=args.name + ("_quick" if args.quick else ""),
         fraction=0.1 if args.quick else 1.0,
-        patience=15,
-        workers=4,
+        patience=args.patience,
+        workers=args.workers,
         plots=True,
         amp=device != "mps",  # fp16 no MPS gera loss NaN no meio da 1ª época (yolo11s, torch 2.8)
     )

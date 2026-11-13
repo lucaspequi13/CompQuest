@@ -1,0 +1,8 @@
+{
+ "video": "data/videos/demo_avenida_cruzamento.mp4",
+ "descricao": "Avenida vista de cima (Pexels 33585547). Carro sai da rua lateral e entra na avenida virando a direita SEM seta (vermelho).",
+ "seta": [
+  {"t0": 38.0, "t1": 41.5, "x": 845, "y": 430, "lado": "nenhuma"}
+ ],
+ "batida": []
+}

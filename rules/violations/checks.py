@@ -132,7 +132,8 @@ def lane_change_no_signal(track, ctx):
         return None
     blinking = track.state.get("blinker") in ("esquerda", "direita")
     ev = fsm.step(lane, blinking)
-    if ev and not ev[3] and _once(track, f"lane{ev[1]}>{ev[2]}"):
+    # Não induzir: sem classificador de seta confiável, não acusa (a manobra vai para revisão no pipeline)
+    if ev and not ev[3] and track.state.get("blinker_reliable", True) and _once(track, f"lane{ev[1]}>{ev[2]}"):
         v = ctx.make("troca_faixa_sem_seta", "grave", "Art. 196", track)
         v.extra["move"] = [ev[1], ev[2]]
         return v

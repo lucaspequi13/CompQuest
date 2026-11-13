@@ -68,6 +68,8 @@ class BlinkerClassifier:
             import joblib
             self.model = joblib.load(model_path)
         self.buf, self.label, self.since, self.fallback = {}, {}, {}, {}
+        # Só um modelo treinado e validado pode acusar "sem seta". A heurística não sabe o lado.
+        self.reliable = self.model is not None
 
     def update(self, track_id: int, frame, box) -> str:
         import cv2

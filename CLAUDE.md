@@ -66,6 +66,11 @@ Câmera → [RingBuffer] → Detector YOLO → Tracker [Kalman + Húngaro] → R
 
 ## 5. Ambiente
 
+**Desde 13/11 (tarde) o treino é no PC Windows** (`D:\CompQuest\CompQuest`): RTX 5060 Ti 16 GB, Python 3.12, `.venv` com torch cu128 (Blackwell precisa de CUDA 12.8+). Ativar: `.\.venv\Scripts\Activate.ps1`. Aqui o AMP (fp16) funciona; batch 32 usa ~15 GB. VisDrone yolo11s: ~1min40s/época (Mac: ~15 min).
+Treino longo: lançar com `Start-Process` (processo separado, sobrevive se o Claude cair), log em `runs/logs/`. Configurar o Windows pra **não suspender** enquanto treina.
+No PowerShell usar `$env:PYTHONIOENCODING='utf-8'` (senão os prints com acento quebram).
+
+Mac (antigo, ainda serve pra rodar a demo):
 - MacBook Air Apple Silicon. Python 3.9.6 em `.venv` (`source .venv/bin/activate`). torch 2.8.0, **MPS = True** (GPU do Mac ok). `bash setup.sh` já rodado com sucesso.
 - `python -m pytest -q tests` → **18 testes** devem passar.
 - No zsh **não colar comentários `# ...`** na mesma linha do comando (deu erro antes).
@@ -112,7 +117,30 @@ Risco: a seta pode não ser visível o bastante no WIBAM. Se não for, plano B �
 - [x] Regras do "gato" + scripts do treino de seta
 - [x] `compquest_update.zip` aplicado + regra de troca de faixa sem seta + seta integrada ao pipeline — 18 testes
 - [x] Sequências de seta extraídas do WIBAM (72)
-- [ ] **EM ANDAMENTO:** treino YOLO VisDrone yolo11s 50 épocas (começou 13/11 ~10:50, ~12 h). Log: `runs/logs/train_visdrone.log`
+- [x] Treino YOLO VisDrone yolo11s 50 épocas, batch 32, no PC (51 min). Pesos: `runs/train/visdrone_vehicles/weights/best.pt` (melhor época 44). **Val: mAP50 0,458 / mAP50-95 0,271. Teste (test-dev): mAP50 0,385 / mAP50-95 0,224** (car 0,716, bus 0,563 de mAP50; bicycle/motor/pedestrian fracos, alvos minúsculos). O treino do Mac foi abandonado.
+- [x] UA-DETRAC (Zenodo 14030107, 9,2 GB, já em YOLO; classes conferidas na imagem: 0 car, 1 bus, 2 van, 3 caminhão) → `scripts/prepare_uadetrac.py` (1 a cada 5 frames no treino): 16.409 train / 5.608 val / 5.623 test em `data/processed/uadetrac`
+- [x] Baseline: `best.pt` do VisDrone no teste do UA-DETRAC = **mAP50 0,642 / mAP50-95 0,428** (car 0,774)
+- [x] **Fine-tune UA-DETRAC concluído** (early stop na época 28, melhor 18) → **`models/detector_final.pt`**. Teste UA-DETRAC: **mAP50 0,642 → 0,763; mAP50-95 0,428 → 0,569** (car 0,774→0,819, van 0,553→0,654, truck 0,555→0,752, bus 0,685→0,828). Usar este peso na demo.
+- [x] **VÍDEOS FINAIS DA DEMO** (modelo final): `runs/demo/final_cruzamento/video_anotado.mp4` (batida 19×24 → fuga do 24; #71 seta OK verde; van #141 sem seta vermelho; conversões reais em amarelo) e `runs/demo/final_avenida/video_anotado.mp4` (#106 entra na avenida sem seta). Prévias: `runs/demo/preview_final_cruzamento.png`, `runs/demo/preview_avenida.png`.
+- [x] ~~fine-tune~~ (histórico) `configs/uadetrac_mix.yaml` (VisDrone + UA-DETRAC no treino, val/teste só UA-DETRAC), a partir do `best.pt`, 30 épocas, começou 13/11 13:32, ~2 h. Log: `runs/logs/train_uadetrac.log`. Saída: `runs/train/uadetrac_ft/weights/best.pt`
+  Windows: `workers=8` deu `CUDA error: resource already mapped` no pin memory → usar 4. Script Python com DataLoader precisa de `if __name__ == "__main__":`.
+- [ ] CARLA no PC (tem NVIDIA) pra gerar cenas de seta dia e noite
+- [ ] **PRÓXIMO (decidido com o Lucas, 13/11): visualização da demo**, depois do fine-tune:
+  1. **Só veículos no vídeo:** filtrar no pipeline (sem retreinar): car, van, truck, bus, motor. Pedestre/bicicleta ignorados.
+  2. **Rastro da manobra (troca de faixa / conversão)** com seta indicando pra onde virou: **verde** = seta pro lado certo; **vermelho** = sem seta (ou seta do lado errado) com confiança → infração; **amarelo** = seta incerta → revisão humana, não vira multa. Não induzir: só pinta verde/vermelho com certeza (hoje o classificador de seta não funciona, então quase tudo sai amarelo — é o honesto).
+  3. **Batida com fuga:** colisão = caixas se sobrepondo + parada brusca; fuga = um dos envolvidos segue andando/sai da cena em poucos segundos. Visual: marca vermelha no ponto da batida + rastro vermelho do que fugiu. Conferir artigo do CTB (omissão de socorro, art. 176 I?).
+  Vídeos pra testar seta e batida com verdade conhecida: CARLA.
+  **✅ Feito (13/11 tarde):** `rules/maneuver.py` (ManeuverWatcher: manobra pela trajetória, lado pelo produto vetorial, cor pela seta), `rules/collision.py` (CollisionWatcher: QuadTree p/ pares, parada brusca sustentada, fuga = um sai e o outro fica), `dashboard/overlay.py` (rastro + seta de direção + BATIDA/FUGA + legenda), `Detector(keep=VEHICLES)`, `run_pipeline.py` grava também `revisao.jsonl`. Regra antiga de faixa só acusa se `blinker_reliable`. 22 testes.
+  Teste real (UA-DETRAC MVI_39031 rodovia e MVI_40701 cruzamento, `data/videos/uadetrac/`): manobras amarelas corretas no cruzamento, 0 fuga falsa. Falsos positivos de batida corrigidos com filtros (caixa pequena, borda da imagem, pés longe no chão, track novo); sobrou 1 alerta de revisão (2 motos lado a lado).
+  Pesquisa (13/11): **não existe modelo pronto** de seta em câmera fixa nem de batida com fuga. Há datasets Roboflow de seta (vista traseira/dashcam) e de "accident" (1 frame, qualidade desconhecida).
+  Lucas cogitou "falsa detecção" pra demo → decidido: **modo roteiro** (detecção e tracking reais; seta/evento anotado à mão num JSON) e dizer nos slides que é encenado/anotado.
+  **✅ Modo roteiro feito:** `rules/roteiro.py` (seta por intervalo + batida por 1 ou 2 pontos; veículo achado pela posição; só veículos do roteiro têm seta "confiável"), `scripts/roteiro_editor.py` (clicar no vídeo: 1/2/0 = seta esq/dir/sem, b = batida, s salvar), `run_pipeline.py --roteiro arq.json` (+ `--dump-tracks`, grava `roteiro_aplicado.json`). Vídeo mostra "(roteiro)" e faixa "MODO ROTEIRO" no rodapé; JSON da infração tem `seta_do_roteiro`/`batida_do_roteiro`. A FUGA é sempre decidida pelo sistema. 24 testes.
+  Exemplo pronto: `data/roteiros/MVI_40701.json` → `runs/demo/MVI_40701_roteiro/video_anotado.mp4` (75 verde, 146 vermelho, batida 30×29 → fuga do 29). Falso positivo conhecido: `gato_marcha_re` no track 136 (troca de ID).
+  **Vídeos baixados (13/11 tarde):** Mixkit (`data/videos/mixkit/`, só o 34562 é câmera alta, mas ela se move → descartado) e Pexels (`data/videos/pexels/`, licença livre). Estáveis: `pexels_33585547` (62 s, avenida + cruzamento visto de cima) → `data/videos/demo_avenida_cruzamento.mp4` (720p/30 fps via `scripts/prepare_video.py`); verticais de cima `demo_topo_{17845993,37247251,38502680}.mp4`. Vista de cima precisa de `--min-box 0.02` (carros ~22 px). Pegou uma conversão real (van 472, frame 1501).
+  **Demo avenida pronta:** cena `data/scenes/pexels_avenida.json` (com `maneuver_roi` = só a faixa da avenida; a curva da direita e a rua lateral ficam fora) + roteiro `data/roteiros/demo_avenida_cruzamento.json` → `runs/demo/avenida_roteiro/video_anotado.mp4`: carro #106 sai da rua lateral e entra na avenida virando à direita SEM seta (vermelho, `conversao_sem_seta`). Rodar com `--min-box 0.02`.
+  Ajustes no `ManeuverWatcher` nessa rodada: trechos parados não entram no histórico (rumo de referência = de onde vinha; seta dada parado conta), piso de 4 px para "parado", ignora caixa na borda, rumo instantâneo (0,3 s) na classificação, `turn_deg` 35 → 28. Cena aceita `maneuver_roi`. 26 testes.
+  CADP: vídeos só no YouTube (Drive sem os clipes). TAD (4,2 GB, Drive id 14GNlNcWLzN-sbzvmrMuSbAg_rZZ5yd26): "Quota exceeded" → Lucas precisa copiar pro Drive dele e baixar, ou tentar mais tarde.
+  Ideia do Lucas: usar trechos de reportagem de TV / vídeos de câmera publicados. Checklist: câmera fixa sem corte/zoom durante o evento, ≥720p, ~5 s antes e depois, citar a fonte, borrar placas/rostos. Melhor fonte: pedir à Prefeitura de Goiânia / Detran-GO (LAI) imagens das câmeras.
 - [x] Seta rotulada (72: 5 direita, 2 esquerda, 65 nenhuma) e treinada → **não funcionou: 0/7 setas achadas na validação cruzada.** Modelo guardado como `models/blinker_rf_v0_nao_usar.joblib` (fora do caminho padrão, para o pipeline não usar).
   Diagnóstico: 7 positivos é pouco; carros em movimento + recorte tremendo; maiores falsos positivos = ônibus (fundo na borda do recorte) e luz de freio. Testado: features por pixel, janelas menores, supervisão fraca, autocorrelação — melhora o ranking mas não separa.
   **Enquanto a seta não funcionar, NÃO ativar `lanes` nas cenas**: a regra de troca de faixa acusaria todo mundo de "sem seta".

@@ -22,7 +22,7 @@ class Context:
 
 class RuleEngine:
     def __init__(self, scene_path: str, checks=None):
-        with open(scene_path) as f:
+        with open(scene_path, encoding="utf-8-sig") as f:  # aceita BOM (Windows)
             self.scene = json.load(f)
         self.graph = RoadGraph.from_scene(self.scene)
         self.checks = checks or ALL_CHECKS
