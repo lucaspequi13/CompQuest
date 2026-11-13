@@ -66,10 +66,28 @@ class CollisionWatcher:
         inside = x1 > m and y1 > m and x2 < self.w - m and y2 < self.h - m
         return inside and (y2 - y1) >= self.min_box_h and t.hits >= self.min_age
 
-    def force(self, id_a: int, id_b: int, point, frame_idx: int):
-        """Batida marcada no roteiro. A partir daqui a lógica é a mesma: o sistema decide quem fugiu."""
+    def observing(self, frame_idx: int):
+        """Colisões ainda em observação: [(ponto, segundos que faltam)]. Para mostrar no vídeo."""
+        return [(c["ponto"], max(0.0, (c["frame"] + self.watch - frame_idx) / self.fps)) for c in self.open]
+
+    def finish(self, frame_idx: int):
+        """Fim do vídeo: o que ainda estava em observação fica inconclusivo (revisão humana)."""
+        out = [{"tipo": "colisao_inconclusiva", "ids": c["ids"], "frame": frame_idx, "ponto": c["ponto"],
+                "motivo": "vídeo terminou antes do fim da observação: socorro não observado"} for c in self.open]
+        self.open = []
+        return out
+
+    def force(self, id_a: int, id_b: int, point, frame_idx: int, leaver=None):
+        """Batida marcada no roteiro. Sem `leaver`, o sistema decide quem fugiu (lógica normal).
+        Com `leaver` (roteiro diz quem foi embora), a fuga sai 1,5 s depois, marcada como roteiro."""
+        if id_b is None:  # vítima não rastreada (ponto fixo): fica no local por definição
+            col = {"tipo": "colisao", "ids": [id_a], "frame": frame_idx, "ponto": tuple(point), "roteiro": True,
+                   "leaver": leaver, "vitima": True}
+            self.open.append(col)
+            return dict(col)
         self.seen_pairs.add((min(id_a, id_b), max(id_a, id_b)))
-        col = {"tipo": "colisao", "ids": [id_a, id_b], "frame": frame_idx, "ponto": tuple(point), "roteiro": True}
+        col = {"tipo": "colisao", "ids": [id_a, id_b], "frame": frame_idx, "ponto": tuple(point), "roteiro": True,
+               "leaver": leaver}
         self.open.append(col)
         return dict(col)
 
@@ -109,6 +127,17 @@ class CollisionWatcher:
         # 2) decidir as colisões em observação
         still = []
         for col in self.open:
+            lv = col.get("leaver")
+            if lv is not None:  # fuga dada pelo roteiro
+                if frame_idx - col["frame"] >= int(1.5 * self.fps) or lv not in alive_ids:
+                    if lv not in self.accused and lv in self.last:
+                        self.accused.add(lv)
+                        events.append({"tipo": "fuga", "track_id": lv, "ficou": [i for i in col["ids"] if i != lv],
+                                       "frame": frame_idx, "ponto": col["ponto"], "trilha": self.last[lv]["trail"],
+                                       "cls": self.last[lv]["cls"], "roteiro": True, "fuga_do_roteiro": True})
+                    continue
+                still.append(col)
+                continue
             gone_ids, stayed = [], []
             for tid in col["ids"]:
                 info = self.last.get(tid)
@@ -121,6 +150,8 @@ class CollisionWatcher:
                     gone_ids.append(tid)
                 elif tid in alive_ids and info["speed"] <= 2 * self.stop:
                     stayed.append(tid)
+            if col.get("vitima"):
+                stayed.append("vitima")
             if gone_ids and stayed:
                 for tid in gone_ids:
                     if tid in self.accused:
@@ -134,6 +165,9 @@ class CollisionWatcher:
                 if len(gone_ids) == len(col["ids"]):
                     events.append({"tipo": "colisao_revisao", "ids": col["ids"], "frame": frame_idx,
                                    "ponto": col["ponto"]})
+                else:  # ninguém foi embora durante a observação: pararam no local
+                    events.append({"tipo": "ficaram", "ids": col["ids"], "frame": frame_idx,
+                                   "ponto": col["ponto"], "roteiro": col.get("roteiro", False)})
                 continue
             still.append(col)
         self.open = still

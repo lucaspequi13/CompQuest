@@ -31,7 +31,8 @@ class Detector:
         self.is_coco = len(names) == 80
 
     def __call__(self, frame) -> List[Detection]:
-        res = self.model.predict(frame, conf=self.conf, device=self.device, verbose=False)[0]
+        # agnostic_nms: o mesmo carro às vezes vem como "car" E "van"; sem isso viram 2 tracks e a trajetória racha
+        res = self.model.predict(frame, conf=self.conf, device=self.device, verbose=False, agnostic_nms=True)[0]
         out: List[Detection] = []
         for b in res.boxes:
             cid = int(b.cls)

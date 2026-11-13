@@ -18,7 +18,7 @@ class EvidencePackager:
         os.makedirs(out_dir, exist_ok=True)
         self.prev_hash = "0" * 64
 
-    def package(self, violation, frames: List, key_frame) -> str:
+    def package(self, violation, frames: List, key_frame, plate_crop=None) -> str:
         vid = f"{violation.camera_id}_{violation.frame_idx}_{violation.track_id}_{violation.type}"
         folder = os.path.join(self.out_dir, vid)
         os.makedirs(folder, exist_ok=True)
@@ -31,9 +31,15 @@ class EvidencePackager:
                 vw.write(f)
             vw.release()
         cv2.imwrite(os.path.join(folder, "frame.jpg"), key_frame)
+        files = ["clip.mp4", "frame.jpg"]
+        if plate_crop is not None and getattr(plate_crop, "size", 0):
+            # melhor recorte da placa visto pelo sistema (mesmo ilegível: o agente confere)
+            big = cv2.resize(plate_crop, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+            cv2.imwrite(os.path.join(folder, "placa.jpg"), big)
+            files.append("placa.jpg")
 
         meta = violation.to_dict()
-        meta["files"] = ["clip.mp4", "frame.jpg"]
+        meta["files"] = files
         digest = hashlib.sha256()
         for name in meta["files"]:
             p = os.path.join(folder, name)

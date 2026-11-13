@@ -20,7 +20,17 @@ def _maneuvers(points, blinker="nenhuma", reliable=False):
             ev = mw.update(t, i, reliable)
             if ev:
                 evs.append(ev)
+    evs += mw.flush(set(), len(points), lambda t: reliable)  # carro saiu de cena: fecha a manobra
     return evs
+
+
+def test_turn_side_decided_by_whole_maneuver():
+    """Carro sobe, 'abre' um pouco para a direita e converte à ESQUERDA: o lado é o da conversão inteira."""
+    pts = [(400, 600 - 8 * i) for i in range(40)]                       # sobe (afastando da câmera)
+    pts += [(400 + 3 * i, 280 - 8 * i) for i in range(1, 10)]          # abre para a direita
+    pts += [(427 - 8 * i, 208 - 3 * i) for i in range(1, 40)]          # converte para a esquerda da tela
+    evs = _maneuvers(pts)
+    assert evs and evs[0]["tipo"] == "conversao" and evs[0]["lado"] == "esquerda"
 
 
 def test_maneuver_side_and_colors():
@@ -58,6 +68,7 @@ def test_blinker_while_stopped_counts():
             ev = mw.update(t, i, True)
             if ev:
                 evs.append(ev)
+    evs += mw.flush(set(), len(pts), lambda t: True)
     assert evs and evs[0]["cor"] == VERDE
 
 
@@ -90,4 +101,17 @@ def test_collision_and_hit_and_run():
 def test_collision_without_leaving_is_not_hit_and_run():
     evs = _crash([(292, 200)] * 150)                                       # A fica parado no local
     kinds = [e["tipo"] for e in evs]
-    assert "colisao" in kinds and "fuga" not in kinds
+    assert "colisao" in kinds and "fuga" not in kinds and "ficaram" in kinds
+
+
+def test_video_ends_before_observation_is_inconclusive():
+    tr, cw = Tracker(min_hits=1), CollisionWatcher(30.0, (640, 480))
+    a = [(100 + 12 * i, 200) for i in range(17)] + [(292, 200)] * 20       # bate e o vídeo acaba logo
+    kinds = []
+    for i, pa in enumerate(a):
+        dets = [Detection((270, 160, 330, 200), "car", 0.9), Detection((pa[0] - 20, pa[1] - 40, pa[0] + 20, pa[1]), "car", 0.9)]
+        tracks = tr.update(dets)
+        kinds += [e["tipo"] for e in cw.update(tracks, {t.id for t in tr.tracks}, i)]
+    assert "colisao" in kinds and cw.observing(len(a))
+    fim = cw.finish(len(a))
+    assert len(fim) == 1 and fim[0]["tipo"] == "colisao_inconclusiva" and not cw.observing(len(a))

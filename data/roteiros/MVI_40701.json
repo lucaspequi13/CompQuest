@@ -2,7 +2,7 @@
  "video": "data/videos/uadetrac/MVI_40701.mp4",
  "descricao": "Exemplo: cruzamento UA-DETRAC. 75 com seta (verde), 146 sem seta (vermelho), 161 sem anotacao (amarelo), batida encenada 30x29.",
  "seta": [
-  {"t0": 9.4, "t1": 10.6, "x": 550, "y": 289, "lado": "direita"},
+  {"t0": 9.4, "t1": 10.6, "x": 550, "y": 289, "lado": "esquerda"},
   {"t0": 13.2, "t1": 16.0, "x": 780, "y": 500, "lado": "nenhuma"}
  ],
  "batida": [

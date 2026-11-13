@@ -14,6 +14,8 @@ Em perspectiva, reta da via vira reta na imagem, então andar reto não gera des
 import math
 from collections import deque
 
+from eda.geometry import point_in_polygon
+
 VERDE, VERMELHO, AMARELO = "verde", "vermelho", "amarelo"
 SIDES = ("esquerda", "direita")
 
@@ -51,13 +53,36 @@ def judge_signal(side, labels, reliable):
     return VERMELHO, "sem seta"
 
 
+def maneuver_from_trail(track, n_frames: int, tipo: str, frame_idx: int, reliable: bool):
+    """Manobra marcada no roteiro (o QUANDO): rota = trajetória real dos últimos n_frames do track;
+    lado = sinal do produto vetorial entre o rumo do começo e o do fim (geometria); cor = seta."""
+    pts = list(track.trail)[-max(6, n_frames):]
+    k = max(2, len(pts) // 4)
+    d1 = _sub(_mean(pts[k:2 * k]), _mean(pts[:k]))
+    d2 = _sub(_mean(pts[-k:]), _mean(pts[-2 * k:-k]))
+    side = "direita" if _cross(d1, d2) > 0 else "esquerda"
+    hist = track.state.get("mv_hist") or []
+    labels = [e[1] for e in hist] + [track.state.get("blinker", "nenhuma")]
+    cor, motivo = judge_signal(side, labels, reliable)
+    return {"tipo": tipo, "lado": side, "cor": cor, "motivo": motivo, "track_id": track.id, "cls": track.cls,
+            "frame": frame_idx, "pontos": pts, "giro_graus": round(_angle_deg(d1, d2), 1),
+            "roteiro": True, "manobra_do_roteiro": True}
+
+
 class ManeuverWatcher:
     """Um por câmera. update() por frame com os tracks confirmados; devolve eventos de manobra."""
 
     def __init__(self, fps: float, base_s: float = 1.0, lookback_s: float = 4.0, smooth: int = 5,
                  lateral_ratio: float = 1.0, turn_deg: float = 28.0, min_move_ratio: float = 0.6,
-                 min_box_px: float = 0.0, frame_size=None, edge_frac: float = 0.03):
+                 min_box_px: float = 0.0, frame_size=None, edge_frac: float = 0.03, settle_s: float = 3.0,
+                 roi=None):
         self.fps = fps
+        self.roi = roi  # região de fiscalização: fora dela a regra nem dispara (não gasta o tempo de espera)
+        self.still_n = max(smooth, int(fps))  # "parado" medido em 1 s: carro devagar (conversão lenta) anda
+        # a regra DETECTA no começo da curva, mas só DECIDE lado/tipo quando a manobra termina (settle_s depois
+        # ou quando o veículo sai de cena): no começo o carro "abre" para o outro lado e engana o lado.
+        self.settle = max(1, int(settle_s * fps))
+        self.pending = {}  # track_id -> (track, frame do gatilho, frame inicial da manobra)
         self.frame_size = frame_size                         # (w, h): ignora manobra colada na borda
         self.edge_frac = edge_frac
         self.base = max(smooth + 1, int(base_s * fps))       # frames que definem o rumo de referência
@@ -73,17 +98,29 @@ class ManeuverWatcher:
         hist = st.get("mv_hist")
         if hist is None:
             hist = st["mv_hist"] = deque(maxlen=self.maxlen)
-        if frame_idx < st.get("mv_cooldown", -1):  # ainda terminando a manobra anterior
-            hist.clear()
-            return None
         x1, y1, x2, y2 = track.box
         blink = st.get("blinker", "nenhuma")
         raw = st.get("mv_raw")
         if raw is None:
-            raw = st["mv_raw"] = deque(maxlen=self.smooth + 1)
+            raw = st["mv_raw"] = deque(maxlen=self.still_n + 1)
         raw.append(track.point)
-        if len(raw) > self.smooth and math.hypot(track.point[0] - raw[0][0], track.point[1] - raw[0][1]) \
-                < max(0.1 * (y2 - y1), 4.0):  # piso em px: em carro pequeno o tremor da caixa já passa de 10%
+        # parado = andou menos de 30% da altura (piso 5 px) em 1 s. Em 5 frames, carro fazendo conversão
+        # devagar contava como parado e a curva inteira sumia; carro parado de verdade só treme ±2 px.
+        moving = not (len(raw) > self.still_n and math.hypot(track.point[0] - raw[0][0], track.point[1] - raw[0][1])
+                      < max(0.3 * (y2 - y1), 5.0))
+        if moving:  # caminho completo (sem os trechos parados), usado para decidir a manobra no fim
+            path = st.get("mv_path")
+            if path is None:
+                path = st["mv_path"] = deque(maxlen=int(12 * self.fps))
+            path.append((track.point, blink, frame_idx))
+        if track.id in self.pending:  # manobra detectada: espera ela terminar para decidir o lado
+            if frame_idx - self.pending[track.id][1] >= self.settle:
+                return self._finalize(track.id, frame_idx, reliable)
+            return None
+        if frame_idx < st.get("mv_cooldown", -1):  # ainda terminando a manobra anterior
+            hist.clear()
+            return None
+        if not moving:
             # parado (fila, sinal): não entra no histórico. A trajetória de antes de parar emenda com a de
             # depois, então o rumo de referência é "de onde ele vinha" (certo para quem para e vira).
             # A seta vista parado conta: é aí que o motorista costuma ligar o pisca.
@@ -98,6 +135,8 @@ class ManeuverWatcher:
             mx, my = self.edge_frac * W, self.edge_frac * H
             if x1 < mx or y1 < my or x2 > W - mx or y2 > H - my:  # caixa cortada / rua curvando na borda
                 return None
+        if self.roi and not point_in_polygon(track.point, self.roi):
+            return None
         h = list(hist)
         k = self.smooth
         p0 = _mean([e[0] for e in h[:k]])
@@ -118,17 +157,48 @@ class ManeuverWatcher:
             return None
         if lateral < self.lateral_ratio * width and turn < self.turn_deg:
             return None
-        side = "direita" if _cross(d, v) > 0 else "esquerda"
-        kind = "conversao" if turn >= self.turn_deg else "troca_faixa"
-        labels = [e[1] for e in h]
+        # gatilho: a manobra começou. Lado e tipo são decididos no fim (_finalize).
+        self.pending[track.id] = (track, frame_idx, h[0][4], round(lateral, 1), width, track.point)
+        hist.clear()
+        st["mv_cooldown"] = frame_idx + self.settle + int(1.0 * self.fps)
+        return None
+
+    def _finalize(self, tid, frame_idx, reliable):
+        """Decide a manobra olhando ela INTEIRA: rumo do começo x rumo do fim (como o olho faz)."""
+        track, trig, start, lateral, width, gatilho = self.pending.pop(tid)
+        st = track.state
+        # trajetória INTEIRA andada até agora (sem os trechos parados): rumo de CHEGADA x rumo de SAÍDA.
+        # Janelas curtas ficam reféns do tremor da caixa e da "abertura" antes da curva.
+        seg = list(st.get("mv_path", []))
+        if len(seg) < 8:
+            return None
+        pts = [e[0] for e in seg]
+        k = max(3, len(pts) // 4)
+        h1 = _sub(_mean(pts[k:2 * k]), _mean(pts[:k]))
+        h2 = _sub(_mean(pts[-k:]), _mean(pts[-2 * k:-k]))
+        turn = _angle_deg(h1, h2)
+        if turn >= 10:  # girou: o lado é o do giro
+            side = "direita" if _cross(h1, h2) > 0 else "esquerda"
+        else:           # quase paralelo (troca de faixa): o lado é o do deslocamento
+            side = "direita" if _cross(h1, _sub(pts[-1], pts[0])) > 0 else "esquerda"
+        # câmera em diagonal "achata" a curva: conversão também é deslocamento lateral grande (troca de faixa
+        # desloca ~1 a 1,5 largura do carro)
+        kind = "conversao" if turn >= self.turn_deg or lateral >= 2.0 * width else "troca_faixa"
+        labels = [e[1] for e in seg if e[2] >= start - self.maxlen]  # seta nos ~4 s antes da manobra
         parado = st.get("mv_blink_parado")
-        if parado and frame_idx - parado[1] <= self.maxlen * 2:  # seta dada enquanto esperava parado
+        if parado and frame_idx - parado[1] <= self.maxlen * 3:  # seta dada enquanto esperava parado
             labels.append(parado[0])
         cor, motivo = judge_signal(side, labels, reliable)
-        ev = {"tipo": kind, "lado": side, "cor": cor, "motivo": motivo, "track_id": track.id,
-              "cls": track.cls, "frame": frame_idx, "pontos": [e[0] for e in h],
-              "lateral_px": round(lateral, 1), "giro_graus": round(turn, 1)}
-        # recomeça depois de 1,5 s: a próxima manobra precisa de um rumo novo
-        hist.clear()
-        st["mv_cooldown"] = frame_idx + int(1.5 * self.fps)
-        return ev
+        return {"tipo": kind, "lado": side, "cor": cor, "motivo": motivo, "track_id": track.id,
+                "cls": track.cls, "frame": frame_idx, "pontos": pts, "lateral_px": lateral,
+                "giro_graus": round(turn, 1), "gatilho": gatilho, "_track": track}
+
+    def flush(self, alive_ids, frame_idx, reliable_of=lambda t: False):
+        """Fecha as manobras de veículos que saíram de cena (decide com o que foi visto)."""
+        out = []
+        for tid in [t for t in self.pending if t not in alive_ids]:
+            track = self.pending[tid][0]
+            ev = self._finalize(tid, frame_idx, reliable_of(track))
+            if ev:
+                out.append(ev)
+        return out
