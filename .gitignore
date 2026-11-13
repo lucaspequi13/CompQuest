@@ -7,3 +7,10 @@ models/pretrained/*.pt
 runs/
 evidence/out/
 .DS_Store
+# vídeos baixados / gerados (pesados, licença de terceiros) — ver CLAUDE.md para refazer
+data/videos/mixkit/
+data/videos/pexels/
+data/videos/uadetrac/
+data/videos/demo_*.mp4
+# pesos intermediários (o final, models/detector_final.pt, vai no git)
+models/*_parcial.pt

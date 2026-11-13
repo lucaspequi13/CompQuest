@@ -1,0 +1,18 @@
+# Fine-tune: VisDrone (mantém pedestre/bicicleta/moto) + UA-DETRAC (câmera de trânsito em viaduto, dia e noite).
+# Validação e teste só no UA-DETRAC, que é o domínio da câmera de poste.
+# Gerado por scripts/prepare_visdrone.py e scripts/prepare_uadetrac.py
+path: ../data/processed
+train:
+  - visdrone/images/train
+  - uadetrac/images/train
+val: uadetrac/images/val
+test: uadetrac/images/test
+
+names:
+  0: pedestrian
+  1: bicycle
+  2: car
+  3: van
+  4: truck
+  5: bus
+  6: motor
