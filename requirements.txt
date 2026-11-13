@@ -1,0 +1,15 @@
+ultralytics>=8.3
+torch
+torchvision
+opencv-python
+numpy
+pillow
+pandas
+fastapi
+uvicorn
+streamlit
+pytest
+scikit-learn
+joblib
+# opcional, para OCR de placa quando tiver o detector de placas:
+# easyocr

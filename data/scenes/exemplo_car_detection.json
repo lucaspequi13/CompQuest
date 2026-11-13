@@ -1,0 +1,158 @@
+{
+  "camera_id": "demo_estacionamento",
+  "descricao": "Cena FICTICIA sobre o video de estacionamento car-detection.mp4 (768x432), so para testar o pipeline. Linhas/poligonos nao correspondem a sinalizacao real.",
+  "frame_size": [
+    768,
+    432
+  ],
+  "stop_line": [
+    [
+      0,
+      260
+    ],
+    [
+      768,
+      260
+    ]
+  ],
+  "traffic_light_roi": null,
+  "crosswalk": [
+    [
+      0,
+      300
+    ],
+    [
+      768,
+      300
+    ],
+    [
+      768,
+      360
+    ],
+    [
+      0,
+      360
+    ]
+  ],
+  "solid_lines": [
+    [
+      [
+        384,
+        100
+      ],
+      [
+        384,
+        432
+      ]
+    ]
+  ],
+  "bus_lane": {
+    "polygon": [
+      [
+        600,
+        0
+      ],
+      [
+        768,
+        0
+      ],
+      [
+        768,
+        432
+      ],
+      [
+        600,
+        432
+      ]
+    ],
+    "hours": [
+      [
+        0,
+        24
+      ]
+    ]
+  },
+  "zones": [
+    {
+      "id": "faixa_esquerda",
+      "polygon": [
+        [
+          0,
+          0
+        ],
+        [
+          384,
+          0
+        ],
+        [
+          384,
+          432
+        ],
+        [
+          0,
+          432
+        ]
+      ],
+      "direction": [
+        0,
+        1
+      ],
+      "one_way": true
+    },
+    {
+      "id": "faixa_direita",
+      "polygon": [
+        [
+          384,
+          0
+        ],
+        [
+          768,
+          0
+        ],
+        [
+          768,
+          432
+        ],
+        [
+          384,
+          432
+        ]
+      ],
+      "direction": [
+        0,
+        1
+      ],
+      "one_way": true
+    }
+  ],
+  "allowed_moves": [
+    [
+      "faixa_esquerda",
+      "faixa_direita"
+    ]
+  ],
+  "forbidden_areas": [
+    {
+      "tipo": "canteiro",
+      "polygon": [
+        [
+          0,
+          380
+        ],
+        [
+          150,
+          380
+        ],
+        [
+          150,
+          432
+        ],
+        [
+          0,
+          432
+        ]
+      ]
+    }
+  ]
+}

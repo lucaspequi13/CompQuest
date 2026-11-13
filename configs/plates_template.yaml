@@ -1,0 +1,9 @@
+# TEMPLATE — detector de placas BR (1 classe).
+# Preencher quando tiver RodoSol-ALPR / UFPR-ALPR (ver docs/DATASETS.md)
+# convertidos para YOLO em data/processed/plates
+path: ../data/processed/plates
+train: images/train
+val: images/val
+
+names:
+  0: plate

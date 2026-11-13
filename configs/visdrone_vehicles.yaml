@@ -1,0 +1,14 @@
+# VisDrone convertido por scripts/prepare_visdrone.py (visão alta/aérea, parecida com câmera de poste)
+path: ../data/processed/visdrone
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: pedestrian
+  1: bicycle
+  2: car
+  3: van
+  4: truck
+  5: bus
+  6: motor
